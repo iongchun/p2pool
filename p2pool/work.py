@@ -20,7 +20,7 @@ print_throttle = 0.0
 class WorkerBridge(worker_interface.WorkerBridge):
     COINBASE_NONCE_LENGTH = 8
     
-    def __init__(self, node, my_pubkey_hash, donation_percentage, merged_urls, worker_fee, args, pubkeys, bitcoind, share_rate, share_rate_type):
+    def __init__(self, node, my_pubkey_hash, donation_percentage, merged_urls, worker_fee, args, pubkeys, bitcoind, min_difficulty, share_rate, share_rate_type):
         worker_interface.WorkerBridge.__init__(self)
         self.recent_shares_ts_work = []
         
@@ -33,6 +33,7 @@ class WorkerBridge(worker_interface.WorkerBridge):
 
         self.donation_percentage = args.donation_percentage
         self.worker_fee = args.worker_fee
+        self.min_difficulty = min_difficulty
         self.share_rate = share_rate
         self.share_rate_type = share_rate_type
         
@@ -353,7 +354,7 @@ class WorkerBridge(worker_interface.WorkerBridge):
         mm_later = [(dict(aux_work, target=aux_work['target'] if aux_work['target'] != 'p2pool' else share_info['bits'].target), index, hashes) for aux_work, index, hashes in mm_later]
         
         if desired_pseudoshare_target is None:
-            target = 2**256-1
+            target = bitcoin_data.difficulty_to_target(self.min_difficulty)
             if self.share_rate is not None:
                 if self.share_rate_type == 'address': # per-address
                     if local_addr_rates is not None:
