@@ -351,6 +351,7 @@ def get_web_root(wb, datadir_path, bitcoind_getinfo_var, stop_event=variable.Eve
         'last_day': graph.DataViewDescription(300, 60*60*24),
         'last_3days': graph.DataViewDescription(300, 60*60*24*3),
         'last_week': graph.DataViewDescription(300, 60*60*24*7),
+        'last_2weeks': graph.DataViewDescription(300, 60*60*24*14),
         'last_month': graph.DataViewDescription(300, 60*60*24*30),
         'last_3months': graph.DataViewDescription(300, 60*60*24*30*3),
         'last_6months': graph.DataViewDescription(300, 60*60*24*30*6),
