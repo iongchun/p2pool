@@ -70,7 +70,7 @@ class DataView(object):
                     val = dict((k, total/real_count) for k, (total, count) in bin.iteritems())
                 default = 0
             elif self.ds_desc.is_gauge and not self.ds_desc.multivalue_undefined_means_0:
-                val = dict((k, total/count) for k, (total, count) in bin.iteritems())
+                val = dict((k, 0 if count == 0 else total/count) for k, (total, count) in bin.iteritems())
                 default = None
             else:
                 val = dict((k, total/width) for k, (total, count) in bin.iteritems())
@@ -117,7 +117,7 @@ class HistoryDatabase(object):
                     dv_data = ds_data[dv_name]
                     if dv_data['bin_width'] == dv_desc.bin_width and len(dv_data['bins']) == dv_desc.bin_count:
                         return DataView(dv_desc, ds_desc, dv_data['last_bin_end'], map(convert_bin, dv_data['bins']))
-            elif ds_desc.default_func is None:
+            if ds_desc.default_func is None:
                 return DataView(dv_desc, ds_desc, 0, dv_desc.bin_count*[{}])
             else:
                 return ds_desc.default_func(ds_name, ds_desc, dv_name, dv_desc, obj)
