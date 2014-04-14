@@ -276,6 +276,7 @@ def get_web_root(wb, datadir_path, bitcoind_getinfo_var, stop_event=variable.Eve
         if int(share_hash_str, 16) not in node.tracker.items:
             return None
         share = node.tracker.items[int(share_hash_str, 16)]
+        other_tx_hashes = share.get_other_tx_hashes(node.tracker)
         
         return dict(
             parent='%064x' % share.previous_hash,
@@ -314,7 +315,7 @@ def get_web_root(wb, datadir_path, bitcoind_getinfo_var, stop_event=variable.Eve
                     value=share.share_data['subsidy']*1e-8,
                     last_txout_nonce='%016x' % share.contents['last_txout_nonce'],
                 ),
-                other_transaction_hashes=['%064x' % x for x in share.get_other_tx_hashes(node.tracker)],
+                other_transaction_hashes=[] if other_tx_hashes is None else ['%064x' % x for x in other_tx_hashes],
             ),
         )
     new_root.putChild('share', WebInterface(lambda share_hash_str: get_share(share_hash_str)))
