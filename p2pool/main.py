@@ -14,7 +14,7 @@ import urlparse
 if '--iocp' in sys.argv:
     from twisted.internet import iocpreactor
     iocpreactor.install()
-from twisted.internet import defer, reactor, protocol, task, tcp
+from twisted.internet import defer, reactor, protocol, tcp
 from twisted.web import server
 from twisted.python import log
 from nattraverso import portmapper, ipdiscover
@@ -37,7 +37,11 @@ def main(args, net, datadir_path, merged_urls, worker_endpoint):
             print '''Testing bitcoind P2P connection to '%s:%s'...''' % (args.bitcoind_address, args.bitcoind_p2p_port)
             factory = bitcoin_p2p.ClientFactory(net.PARENT)
             reactor.connectTCP(args.bitcoind_address, args.bitcoind_p2p_port, factory)
+            def long():
+                print '''    ...taking a while. Common reasons for this include all of bitcoind's connection slots being used...'''
+            long_dc = reactor.callLater(5, long)
             yield factory.getProtocol() # waits until handshake is successful
+            if not long_dc.called: long_dc.cancel()
             print '    ...success!'
             print
             defer.returnValue(factory)
@@ -52,13 +56,12 @@ def main(args, net, datadir_path, merged_urls, worker_endpoint):
         yield helper.check(bitcoind, net)
         temp_work = yield helper.getwork(bitcoind)
         
-        bitcoind_warning_var = variable.Variable(None)
+        bitcoind_getinfo_var = variable.Variable(None)
         @defer.inlineCallbacks
         def poll_warnings():
-            errors = (yield deferral.retry('Error while calling getmininginfo:')(bitcoind.rpc_getmininginfo)())['errors']
-            bitcoind_warning_var.set(errors if errors != '' else None)
+            bitcoind_getinfo_var.set((yield deferral.retry('Error while calling getinfo:')(bitcoind.rpc_getinfo)()))
         yield poll_warnings()
-        task.LoopingCall(poll_warnings).start(20*60)
+        deferral.RobustLoopingCall(poll_warnings).start(20*60)
         
         print '    ...success!'
         print '    Current block hash: %x' % (temp_work['previous_block'],)
@@ -98,20 +101,15 @@ def main(args, net, datadir_path, merged_urls, worker_endpoint):
         print '    ...success! Payout address:', bitcoin_data.pubkey_hash_to_address(my_pubkey_hash, net.PARENT)
         print
         
-        ss = p2pool_data.ShareStore(os.path.join(datadir_path, 'shares.'), net)
+        print "Loading shares..."
         shares = {}
         known_verified = set()
-        print "Loading shares..."
-        for i, (mode, contents) in enumerate(ss.get_shares()):
-            if mode == 'share':
-                contents.time_seen = 0
-                shares[contents.hash] = contents
-                if len(shares) % 1000 == 0 and shares:
-                    print "    %i" % (len(shares),)
-            elif mode == 'verified_hash':
-                known_verified.add(contents)
-            else:
-                raise AssertionError()
+        def share_cb(share):
+            share.time_seen = 0 # XXX
+            shares[share.hash] = share
+            if len(shares) % 1000 == 0 and shares:
+                print "    %i" % (len(shares),)
+        ss = p2pool_data.ShareStore(os.path.join(datadir_path, 'shares.'), net, share_cb, known_verified.add)
         print "    ...done loading %i shares (%i verified)!" % (len(shares), len(known_verified))
         print
         
@@ -127,7 +125,6 @@ def main(args, net, datadir_path, merged_urls, worker_endpoint):
         for share_hash in known_verified:
             if share_hash not in node.tracker.verified.items:
                 ss.forget_verified_share(share_hash)
-        del shares, known_verified
         node.tracker.removed.watch(lambda share: ss.forget_share(share.hash))
         node.tracker.verified.removed.watch(lambda share: ss.forget_verified_share(share.hash))
         
@@ -136,7 +133,7 @@ def main(args, net, datadir_path, merged_urls, worker_endpoint):
                 ss.add_share(share)
                 if share.hash in node.tracker.verified.items:
                     ss.add_verified_hash(share.hash)
-        task.LoopingCall(save_shares).start(60)
+        deferral.RobustLoopingCall(save_shares).start(60)
         
         print '    ...success!'
         print
@@ -180,13 +177,14 @@ def main(args, net, datadir_path, merged_urls, worker_endpoint):
             addr_store=addrs,
             connect_addrs=connect_addrs,
             desired_outgoing_conns=args.p2pool_outgoing_conns,
+            advertise_ip=args.advertise_ip,
         )
         node.p2p_node.start()
         
         def save_addrs():
             with open(os.path.join(datadir_path, 'addrs'), 'wb') as f:
                 f.write(json.dumps(node.p2p_node.addr_store.items()))
-        task.LoopingCall(save_addrs).start(60)
+        deferral.RobustLoopingCall(save_addrs).start(60)
         
         print '    ...success!'
         print
@@ -213,9 +211,9 @@ def main(args, net, datadir_path, merged_urls, worker_endpoint):
         print 'Listening for workers on %r port %i...' % (worker_endpoint[0], worker_endpoint[1])
         
         wb = work.WorkerBridge(node, my_pubkey_hash, args.donation_percentage, merged_urls, args.worker_fee)
-        web_root = web.get_web_root(wb, datadir_path, bitcoind_warning_var)
+        web_root = web.get_web_root(wb, datadir_path, bitcoind_getinfo_var)
         caching_wb = worker_interface.CachingWorkerBridge(wb)
-        worker_interface.WorkerInterface(caching_wb).attach_to(web_root, get_handler=lambda request: request.redirect('/static/'))
+        worker_interface.WorkerInterface(caching_wb).attach_to(web_root, get_handler=lambda request: request.redirect('static/'))
         web_serverfactory = server.Site(web_root)
         
         
@@ -247,7 +245,7 @@ def main(args, net, datadir_path, merged_urls, worker_endpoint):
                 sys.stderr.write, 'Watchdog timer went off at:\n' + ''.join(traceback.format_stack())
             ))
             signal.siginterrupt(signal.SIGALRM, False)
-            task.LoopingCall(signal.alarm, 30).start(1)
+            deferral.RobustLoopingCall(signal.alarm, 30).start(1)
         
         if args.irc_announce:
             from twisted.words.protocols import irc
@@ -291,7 +289,7 @@ def main(args, net, datadir_path, merged_urls, worker_endpoint):
                     print 'IRC connection lost:', reason.getErrorMessage()
             class IRCClientFactory(protocol.ReconnectingClientFactory):
                 protocol = IRCClient
-            reactor.connectTCP("irc.freenode.net", 6667, IRCClientFactory())
+            reactor.connectTCP("irc.freenode.net", 6667, IRCClientFactory(), bindAddress=(worker_endpoint[0], 0))
         
         @defer.inlineCallbacks
         def status_thread():
@@ -311,11 +309,12 @@ def main(args, net, datadir_path, merged_urls, worker_endpoint):
                     
                     datums, dt = wb.local_rate_monitor.get_datums_in_last()
                     my_att_s = sum(datum['work']/dt for datum in datums)
+                    my_shares_per_s = sum(datum['work']/dt/bitcoin_data.target_to_average_attempts(datum['share_target']) for datum in datums)
                     this_str += '\n Local: %sH/s in last %s Local dead on arrival: %s Expected time to share: %s' % (
                         math.format(int(my_att_s)),
                         math.format_dt(dt),
                         math.format_binomial_conf(sum(1 for datum in datums if datum['dead']), len(datums), 0.95),
-                        math.format_dt(2**256 / node.tracker.items[node.best_share_var.value].max_target / my_att_s) if my_att_s and node.best_share_var.value else '???',
+                        math.format_dt(1/my_shares_per_s) if my_shares_per_s else '???',
                     )
                     
                     if height > 2:
@@ -335,7 +334,7 @@ def main(args, net, datadir_path, merged_urls, worker_endpoint):
                             math.format_dt(2**256 / node.bitcoind_work.value['bits'].target / real_att_s),
                         )
                         
-                        for warning in p2pool_data.get_warnings(node.tracker, node.best_share_var.value, net, bitcoind_warning_var.value, node.bitcoind_work.value):
+                        for warning in p2pool_data.get_warnings(node.tracker, node.best_share_var.value, net, bitcoind_getinfo_var.value, node.bitcoind_work.value):
                             print >>sys.stderr, '#'*40
                             print >>sys.stderr, '>>> Warning: ' + warning
                             print >>sys.stderr, '#'*40
@@ -414,6 +413,9 @@ def run():
     p2pool_group.add_argument('--outgoing-conns', metavar='CONNS',
         help='outgoing connections (default: 6)',
         type=int, action='store', default=6, dest='p2pool_outgoing_conns')
+    parser.add_argument('--disable-advertise',
+        help='''don't advertise local IP address as being available for incoming connections. useful for running a dark node, along with multiple -n ADDR's and --outgoing-conns 0''',
+        action='store_false', default=True, dest='advertise_ip')
     
     worker_group = parser.add_argument_group('worker interface')
     worker_group.add_argument('-w', '--worker-port', metavar='PORT or ADDR:PORT',
@@ -542,7 +544,7 @@ def run():
             logfile.reopen()
             print '...and reopened %r after catching SIGUSR1.' % (args.logfile,)
         signal.signal(signal.SIGUSR1, sigusr1)
-    task.LoopingCall(logfile.reopen).start(5)
+    deferral.RobustLoopingCall(logfile.reopen).start(5)
     
     class ErrorReporter(object):
         def __init__(self):
