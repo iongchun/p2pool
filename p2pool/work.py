@@ -164,13 +164,14 @@ class WorkerBridge(worker_interface.WorkerBridge):
         print " Next address rotation in : %fs" % (time.time()-c+self.args.timeaddresses)
  
     def get_user_details(self, username):
-        contents = re.split('([+/])', username)
+        contents = re.split('([+/_])', username)
         assert len(contents) % 2 == 1
         
         user, contents2 = contents[0], contents[1:]
         
         desired_pseudoshare_target = None
         desired_share_target = None
+        worker = user
         for symbol, parameter in zip(contents2[::2], contents2[1::2]):
             if symbol == '+':
                 try:
@@ -184,6 +185,8 @@ class WorkerBridge(worker_interface.WorkerBridge):
                 except:
                     if p2pool.DEBUG:
                         log.err()
+            elif symbol == '_':
+                worker = '_'.join([worker, parameter])
 
         if self.args.address == 'dynamic':
             i = self.pubkeys.weighted()
@@ -202,14 +205,14 @@ class WorkerBridge(worker_interface.WorkerBridge):
                 if self.args.address != 'dynamic':
                     pubkey_hash = self.my_pubkey_hash
         
-        return user, pubkey_hash, desired_share_target, desired_pseudoshare_target
+        return user, worker, pubkey_hash, desired_share_target, desired_pseudoshare_target
     
     def preprocess_request(self, user):
         if (self.node.p2p_node is None or len(self.node.p2p_node.peers) == 0) and self.node.net.PERSIST:
             raise jsonrpc.Error_for_code(-12345)(u'p2pool is not connected to any peers')
         if time.time() > self.current_work.value['last_update'] + 60:
             raise jsonrpc.Error_for_code(-12345)(u'lost contact with bitcoind')
-        user, pubkey_hash, desired_share_target, desired_pseudoshare_target = self.get_user_details(user)
+        user, worker, pubkey_hash, desired_share_target, desired_pseudoshare_target = self.get_user_details(user)
         return pubkey_hash, desired_share_target, desired_pseudoshare_target
     
     def _estimate_local_hash_rate(self):
@@ -398,7 +401,7 @@ class WorkerBridge(worker_interface.WorkerBridge):
             except:
                 log.err(None, 'Error while processing potential block:')
             
-            user, _, _, _ = self.get_user_details(user)
+            user, worker, _, _, _ = self.get_user_details(user)
             assert header['previous_block'] == ba['previous_block']
             assert header['merkle_root'] == bitcoin_data.check_merkle_link(bitcoin_data.hash256(new_packed_gentx), merkle_link)
             assert header['bits'] == ba['bits']
@@ -437,7 +440,7 @@ class WorkerBridge(worker_interface.WorkerBridge):
                 share = get_share(header, last_txout_nonce)
                 
                 print 'GOT SHARE! %s %s prev %s age %.2fs%s' % (
-                    user,
+                    worker,
                     p2pool_data.format_hash(share.hash),
                     p2pool_data.format_hash(share.previous_hash),
                     time.time() - getwork_time,
@@ -459,19 +462,19 @@ class WorkerBridge(worker_interface.WorkerBridge):
                 self.share_received.happened(bitcoin_data.target_to_average_attempts(share.target), not on_time, share.hash)
             
             if pow_hash > target:
-                print 'Worker %s submitted share with hash > target:' % (user,)
+                print 'Worker %s submitted share with hash > target:' % (worker,)
                 print '    Hash:   %56x' % (pow_hash,)
                 print '    Target: %56x' % (target,)
             elif header_hash in received_header_hashes:
-                print >>sys.stderr, 'Worker %s submitted share more than once!' % (user,)
+                print >>sys.stderr, 'Worker %s submitted share more than once!' % (worker,)
             else:
                 received_header_hashes.add(header_hash)
                 
-                self.pseudoshare_received.happened(bitcoin_data.target_to_average_attempts(target), not on_time, user)
+                self.pseudoshare_received.happened(bitcoin_data.target_to_average_attempts(target), not on_time, user, worker)
                 self.recent_shares_ts_work.append((time.time(), bitcoin_data.target_to_average_attempts(target)))
                 while len(self.recent_shares_ts_work) > 50:
                     self.recent_shares_ts_work.pop(0)
-                self.local_rate_monitor.add_datum(dict(work=bitcoin_data.target_to_average_attempts(target), dead=not on_time, user=user, share_target=share_info['bits'].target))
+                self.local_rate_monitor.add_datum(dict(work=bitcoin_data.target_to_average_attempts(target), dead=not on_time, user=worker, share_target=share_info['bits'].target))
                 self.local_addr_rate_monitor.add_datum(dict(work=bitcoin_data.target_to_average_attempts(target), pubkey_hash=pubkey_hash))
             
             return on_time

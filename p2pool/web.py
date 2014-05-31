@@ -390,7 +390,7 @@ def get_web_root(wb, datadir_path, bitcoind_getinfo_var, stop_event=variable.Eve
     x.start(100)
     stop_event.watch(x.stop)
     @wb.pseudoshare_received.watch
-    def _(work, dead, user):
+    def _(work, dead, user, worker):
         t = time.time()
         hd.datastreams['local_hash_rate'].add_datum(t, work)
         if dead:
@@ -399,6 +399,10 @@ def get_web_root(wb, datadir_path, bitcoind_getinfo_var, stop_event=variable.Eve
             hd.datastreams['miner_hash_rates'].add_datum(t, {user: work})
             if dead:
                 hd.datastreams['miner_dead_hash_rates'].add_datum(t, {user: work})
+        if worker != user:
+            hd.datastreams['miner_hash_rates'].add_datum(t, {worker: work})
+            if dead:
+                hd.datastreams['miner_dead_hash_rates'].add_datum(t, {worker: work})
     @wb.share_received.watch
     def _(work, dead, share_hash):
         t = time.time()
