@@ -377,7 +377,7 @@ def get_web_root(wb, datadir_path, bitcoind_getinfo_var, stop_event=variable.Eve
     x.start(100)
     stop_event.watch(x.stop)
     @wb.pseudoshare_received.watch
-    def _(work, dead, user, worker):
+    def _(work, dead, user):
         t = time.time()
         hd.datastreams['local_hash_rate'].add_datum(t, work)
         if dead:
@@ -386,10 +386,6 @@ def get_web_root(wb, datadir_path, bitcoind_getinfo_var, stop_event=variable.Eve
             hd.datastreams['miner_hash_rates'].add_datum(t, {user: work})
             if dead:
                 hd.datastreams['miner_dead_hash_rates'].add_datum(t, {user: work})
-        if worker != user:
-            hd.datastreams['miner_hash_rates'].add_datum(t, {worker: work})
-            if dead:
-                hd.datastreams['miner_dead_hash_rates'].add_datum(t, {worker: work})
     @wb.share_received.watch
     def _(work, dead, share_hash):
         t = time.time()
@@ -422,9 +418,10 @@ def get_web_root(wb, datadir_path, bitcoind_getinfo_var, stop_event=variable.Eve
         
         current_txouts = node.get_current_txouts()
         hd.datastreams['current_payout'].add_datum(t, current_txouts.get(bitcoin_data.pubkey_hash_to_script2(wb.my_pubkey_hash), 0)*1e-8)
-        miner_hash_rates, miner_dead_hash_rates = wb.get_local_rates()
+        pkh_hash_rates = wb.get_local_addr_rates()
+        addr_hash_rates = dict((bitcoin_data.pubkey_hash_to_address(pubkey_hash, node.net.PARENT), rate) for pubkey_hash, rate in pkh_hash_rates.iteritems())
         current_txouts_by_address = dict((bitcoin_data.script2_to_address(script, node.net.PARENT), amount) for script, amount in current_txouts.iteritems())
-        hd.datastreams['current_payouts'].add_datum(t, dict((user, current_txouts_by_address[user]*1e-8) for user in miner_hash_rates if user in current_txouts_by_address))
+        hd.datastreams['current_payouts'].add_datum(t, dict((address, current_txouts_by_address[address]*1e-8) for address in addr_hash_rates if address in current_txouts_by_address))
         
         hd.datastreams['peers'].add_datum(t, dict(
             incoming=sum(1 for peer in node.p2p_node.peers.itervalues() if peer.incoming),

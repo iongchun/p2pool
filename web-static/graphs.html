@@ -458,9 +458,9 @@
                                     {"data": dead_data.map(function(d){ return [d[0], u in d[1] ? d[1][u] : d[3], d[2]] }), "color": "#FF0000", "label": "Dead"}
                                 ]);
                             });
-                            div.append("svg:svg").each(function(u) {
+                            div.append("svg:svg").each(function(w) {
                                 plot(d3.select(this), currency_info.symbol, null, [
-                                    {"data": current_payouts.map(function(d){ return [d[0], u in d[1] ? d[1][u] : d[3], d[2]] }), "color": "#0000FF"}
+                                    {"data": current_payouts.map(function(d){ u = w.replace(/_.*/, ''); return [d[0], u in d[1] ? d[1][u] : d[3], d[2]] }), "color": "#0000FF"}
                                 ]);
                             });
                         });
