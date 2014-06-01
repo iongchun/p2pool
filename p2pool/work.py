@@ -470,7 +470,7 @@ class WorkerBridge(worker_interface.WorkerBridge):
             else:
                 received_header_hashes.add(header_hash)
                 
-                self.pseudoshare_received.happened(bitcoin_data.target_to_average_attempts(target), not on_time, user, worker)
+                self.pseudoshare_received.happened(bitcoin_data.target_to_average_attempts(target), not on_time, worker)
                 self.recent_shares_ts_work.append((time.time(), bitcoin_data.target_to_average_attempts(target)))
                 while len(self.recent_shares_ts_work) > 50:
                     self.recent_shares_ts_work.pop(0)
