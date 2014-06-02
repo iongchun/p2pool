@@ -137,13 +137,14 @@ class WorkerBridge(worker_interface.WorkerBridge):
         return (my_shares_not_in_chain - my_doa_shares_not_in_chain, my_doa_shares_not_in_chain), my_shares, (orphans_recorded_in_chain, doas_recorded_in_chain)
     
     def get_user_details(self, username):
-        contents = re.split('([+/])', username)
+        contents = re.split('([+/_])', username)
         assert len(contents) % 2 == 1
         
         user, contents2 = contents[0], contents[1:]
         
         desired_pseudoshare_target = None
         desired_share_target = None
+        worker = user
         for symbol, parameter in zip(contents2[::2], contents2[1::2]):
             if symbol == '+':
                 try:
@@ -157,6 +158,8 @@ class WorkerBridge(worker_interface.WorkerBridge):
                 except:
                     if p2pool.DEBUG:
                         log.err()
+            elif symbol == '_':
+                worker = '_'.join([worker, parameter])
         
         if random.uniform(0, 100) < self.worker_fee:
             pubkey_hash = self.my_pubkey_hash
@@ -166,7 +169,7 @@ class WorkerBridge(worker_interface.WorkerBridge):
             except: # XXX blah
                 pubkey_hash = self.my_pubkey_hash
         
-        return user, pubkey_hash, desired_share_target, desired_pseudoshare_target
+        return worker, pubkey_hash, desired_share_target, desired_pseudoshare_target
     
     def preprocess_request(self, user):
         if (self.node.p2p_node is None or len(self.node.p2p_node.peers) == 0) and self.node.net.PERSIST:
