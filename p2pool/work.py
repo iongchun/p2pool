@@ -140,7 +140,8 @@ class WorkerBridge(worker_interface.WorkerBridge):
         contents = re.split('([+/])', username)
         assert len(contents) % 2 == 1
         
-        user, contents2 = contents[0], contents[1:]
+        worker, contents2 = contents[0], contents[1:]
+        user = re.sub('_.*', '', worker)
         
         desired_pseudoshare_target = None
         desired_share_target = None
@@ -166,7 +167,7 @@ class WorkerBridge(worker_interface.WorkerBridge):
             except: # XXX blah
                 pubkey_hash = self.my_pubkey_hash
         
-        return user, pubkey_hash, desired_share_target, desired_pseudoshare_target
+        return worker, pubkey_hash, desired_share_target, desired_pseudoshare_target
     
     def preprocess_request(self, user):
         if (self.node.p2p_node is None or len(self.node.p2p_node.peers) == 0) and self.node.net.PERSIST:
