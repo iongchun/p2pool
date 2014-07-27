@@ -674,6 +674,14 @@ class Node(object):
     def handle_bestblock(self, header, peer):
         print 'handle_bestblock', header
     
+    def cleanup_peers(self):
+        t = time.time()
+        for k, v in self.addr_store.items():
+            services, first_seen, last_seen = v
+            if (t - last_seen) > 60*60*24*30: # not seen for more than 30 days
+                print 'remove old peer: ', k
+                del self.addr_store[k]
+
     def get_good_peers(self, max_count):
         t = time.time()
         return [x[0] for x in sorted(self.addr_store.iteritems(), key=lambda (k, (services, first_seen, last_seen)):
