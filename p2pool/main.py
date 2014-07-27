@@ -251,6 +251,7 @@ def main(args, net, datadir_path, merged_urls, worker_endpoint):
         node.p2p_node.start()
         
         def save_addrs():
+            node.p2p_node.cleanup_peers()
             with open(os.path.join(datadir_path, 'addrs'), 'wb') as f:
                 f.write(json.dumps(node.p2p_node.addr_store.items()))
         deferral.RobustLoopingCall(save_addrs).start(60)
