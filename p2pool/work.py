@@ -32,6 +32,8 @@ class WorkerBridge(worker_interface.WorkerBridge):
         self.share_received = variable.Event()
         self.local_rate_monitor = math.RateMonitor(10*60)
         self.local_addr_rate_monitor = math.RateMonitor(10*60)
+        self.re_username = re.compile('([+/])')
+        self.re_worker = re.compile('_.*')
         
         self.removed_unstales_var = variable.Variable((0, 0, 0))
         self.removed_doa_unstales_var = variable.Variable(0)
@@ -137,11 +139,11 @@ class WorkerBridge(worker_interface.WorkerBridge):
         return (my_shares_not_in_chain - my_doa_shares_not_in_chain, my_doa_shares_not_in_chain), my_shares, (orphans_recorded_in_chain, doas_recorded_in_chain)
     
     def get_user_details(self, username):
-        contents = re.split('([+/])', username)
+        contents = self.re_username.split(username)
         assert len(contents) % 2 == 1
         
         worker, contents2 = contents[0], contents[1:]
-        user = re.sub('_.*', '', worker)
+        user = self.re_worker.sub('', worker)
         
         desired_pseudoshare_target = None
         desired_share_target = None
