@@ -508,7 +508,7 @@
                     .attr('style', 'color:red;border:1px solid red;padding:5px');
             })
             
-            periods = ["Hour", "Day", "Week", "Month", "Year"];
+            periods = ["Hour", "Day", "3Days", "Week", "2Weeks", "Month", "3Months", "6Months", "Year", "2Years"];
             d3.select("#period_chooser").selectAll().data(periods).enter().append("a")
                 .text(function(period) { return period })
                 .attr('href', function(period){ return "?" + period })
