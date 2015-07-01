@@ -40,6 +40,8 @@ class WorkerBridge(worker_interface.WorkerBridge):
         self.share_received = variable.Event()
         self.local_rate_monitor = math.RateMonitor(10*60)
         self.local_addr_rate_monitor = math.RateMonitor(10*60)
+        self.re_username = re.compile('([+/])')
+        self.re_worker = re.compile('_.*')
         
         self.removed_unstales_var = variable.Variable((0, 0, 0))
         self.removed_doa_unstales_var = variable.Variable(0)
@@ -164,10 +166,11 @@ class WorkerBridge(worker_interface.WorkerBridge):
         print " Next address rotation in : %fs" % (time.time()-c+self.args.timeaddresses)
  
     def get_user_details(self, username):
-        contents = re.split('([+/])', username)
+        contents = self.re_username.split(username)
         assert len(contents) % 2 == 1
         
-        user, contents2 = contents[0], contents[1:]
+        worker, contents2 = contents[0], contents[1:]
+        user = self.re_worker.sub('', worker)
         
         desired_pseudoshare_target = None
         desired_share_target = None
@@ -202,7 +205,7 @@ class WorkerBridge(worker_interface.WorkerBridge):
                 if self.args.address != 'dynamic':
                     pubkey_hash = self.my_pubkey_hash
         
-        return user, pubkey_hash, desired_share_target, desired_pseudoshare_target
+        return worker, pubkey_hash, desired_share_target, desired_pseudoshare_target
     
     def preprocess_request(self, user):
         if (self.node.p2p_node is None or len(self.node.p2p_node.peers) == 0) and self.node.net.PERSIST:
